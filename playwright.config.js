@@ -12,6 +12,7 @@ const config = ({
     reporter: 'html',
 
     use: {
+    baseURL: 'https://www.demoblaze.com/',
     browserName: 'chromium',
     headless: true,  //if we want to see the browser in action, we can set headless to false
   },
