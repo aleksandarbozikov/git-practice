@@ -1,121 +1,88 @@
-const {randomUUID} = require('node:crypto');
-const {test, expect} = require('@playwright/test');
-const {AccountPage} = require('../pages/accountPage');
-const {CartPage} = require('../pages/cartPage');
-const {HomePage} = require('../pages/homePage');
-const {ProductPage} = require('../pages/productPage');
+const {expect, test} = require('./fixtures');
+const {CATEGORIES, CATEGORY_PRODUCTS, PRODUCTS} = require('../data/demoblazeCatalog');
 
-test('Verify homepage navigation is visible', async ({page}) => {
-	const homePage = new HomePage(page);
+test('Verify homepage navigation is visible', async ({homePage}) => {
 	await homePage.goToHomePage();
 	await homePage.verifyNavigationIsVisible();
 });
 
-test('Confirm user can filter the products by category', async ({page}) => {
-	const homePage = new HomePage(page);
+test('Show all phones when the Phones category is selected', async ({homePage}) => {
 	await homePage.goToHomePage();
-
 	await homePage.selectPhonesCategory();
-	for (const product of [
-		'Samsung galaxy s6',
-		'Nokia lumia 1520',
-		'Nexus 6',
-		'Samsung galaxy s7',
-		'Iphone 6 32gb',
-		'Sony xperia z5',
-		'HTC One M9'
-	]) {
-		await homePage.verifyProductIsVisible(product);
-	}
-
-	await homePage.selectLaptopsCategory();
-	for (const product of [
-		'Sony vaio i5',
-		'Sony vaio i7',
-		'MacBook air',
-		'Dell i7 8gb',
-		'2017 Dell 15.6 Inch',
-		'MacBook Pro'
-	]) {
-		await homePage.verifyProductIsVisible(product);
-	}
-
-	await homePage.selectMonitorsCategory();
-	await homePage.verifyProductIsVisible('Apple monitor 24');
-	await homePage.verifyProductIsVisible('ASUS Full HD');
+	await homePage.verifyCategoryProductsAreVisible(CATEGORIES.PHONES);
 });
 
-test('View a product details', async ({page}) => {
-	const homePage = new HomePage(page);
-	const productPage = new ProductPage(page);
-	const expectedAppleMonitorPrice = 400;
-
-	await homePage.goToHomePage();
-	await homePage.selectMonitorsCategory();
-	const product = await productPage.open('Apple monitor 24');
-
-	expect(product.price).toBe(expectedAppleMonitorPrice);
-});
-
-test('Add a single product to the cart', async ({page}) => {
-	const homePage = new HomePage(page);
-	const productPage = new ProductPage(page);
-	const cartPage = new CartPage(page);
-	const expectedMacBookAirPrice = 700;
-
+test('Show all laptops when the Laptops category is selected', async ({homePage}) => {
 	await homePage.goToHomePage();
 	await homePage.selectLaptopsCategory();
-	const product = await productPage.open('MacBook air');
+	await homePage.verifyCategoryProductsAreVisible(CATEGORIES.LAPTOPS);
+});
 
-	expect(product.price).toBe(expectedMacBookAirPrice);
+test('Show all monitors when the Monitors category is selected', async ({homePage}) => {
+	await homePage.goToHomePage();
+	await homePage.selectMonitorsCategory();
+	await homePage.verifyCategoryProductsAreVisible(CATEGORIES.MONITORS);
+});
+
+test('Hide products that do not belong to the selected category', async ({homePage}) => {
+	await homePage.goToHomePage();
+
+	for (const category of Object.keys(CATEGORY_PRODUCTS)) {
+		await homePage.selectCategory(category);
+		await homePage.verifyProductsFromOtherCategoriesAreHidden(category);
+		await homePage.verifyCategoryProductsAreVisible(category);
+	}
+});
+
+test('View product details with the price returned by the product API', async ({homePage, productPage}) => {
+	await homePage.goToHomePage();
+	await homePage.selectMonitorsCategory();
+	await productPage.open(PRODUCTS.APPLE_MONITOR);
+});
+
+test('Add a single product to the cart', async ({homePage, productPage, cartPage}) => {
+	await homePage.goToHomePage();
+	await homePage.selectLaptopsCategory();
+	const product = await productPage.open(PRODUCTS.MACBOOK_AIR);
+
 	await productPage.addToCart();
 	await homePage.clickCartLink();
-	await cartPage.verifyProductIsPresent('MacBook air', expectedMacBookAirPrice);
+	await cartPage.verifyProductIsPresent(PRODUCTS.MACBOOK_AIR, product.price);
 });
 
-test('Sign up with a new user', async ({page}) => {
-	const homePage = new HomePage(page);
-	const accountPage = new AccountPage(page);
-	const username = `testuser-${randomUUID()}`;
-	const password = 'testpassword';
-
+test('Sign up with a new user', async ({homePage, accountPage, newUserCredentials}) => {
 	await homePage.goToHomePage();
 	await homePage.clickSignUpLink();
-	await accountPage.signUp(username, password);
+	await accountPage.signUp(newUserCredentials.username, newUserCredentials.password);
 });
 
-test('New user registration through first purchase', async ({page}) => {
-	const homePage = new HomePage(page);
-	const accountPage = new AccountPage(page);
-	const productPage = new ProductPage(page);
-	const cartPage = new CartPage(page);
-	const username = `registrationuser-${randomUUID()}`;
-	const password = 'registrationpassword';
-	const expectedNokiaLumiaPrice = 820;
-	const expectedMacBookAirPrice = 700;
-	const expectedTotal = expectedNokiaLumiaPrice + expectedMacBookAirPrice;
-
+test('Complete a first purchase after registering a new user', async ({
+	homePage,
+	accountPage,
+	productPage,
+	cartPage,
+	newUserCredentials
+}) => {
 	await homePage.goToHomePage();
 	await homePage.clickSignUpLink();
-	await accountPage.signUp(username, password);
+	await accountPage.signUp(newUserCredentials.username, newUserCredentials.password);
 
 	await homePage.clickLoginLink();
-	await accountPage.logIn(username, password);
+	await accountPage.logIn(newUserCredentials.username, newUserCredentials.password);
 
 	await homePage.selectPhonesCategory();
-	const nokiaLumia = await productPage.open('Nokia lumia 1520');
-	expect(nokiaLumia.price).toBe(expectedNokiaLumiaPrice);
+	const nokiaLumia = await productPage.open(PRODUCTS.NOKIA_LUMIA_1520);
 	await productPage.addToCart();
 
 	await homePage.clickHomeLink();
 	await homePage.selectLaptopsCategory();
-	const macBookAir = await productPage.open('MacBook air');
-	expect(macBookAir.price).toBe(expectedMacBookAirPrice);
+	const macBookAir = await productPage.open(PRODUCTS.MACBOOK_AIR);
 	await productPage.addToCart();
 
+	const expectedTotal = nokiaLumia.price + macBookAir.price;
 	await homePage.clickCartLink();
-	await cartPage.verifyProductIsPresent('Nokia lumia 1520', expectedNokiaLumiaPrice);
-	await cartPage.verifyProductIsPresent('MacBook air', expectedMacBookAirPrice);
+	await cartPage.verifyProductIsPresent(PRODUCTS.NOKIA_LUMIA_1520, nokiaLumia.price);
+	await cartPage.verifyProductIsPresent(PRODUCTS.MACBOOK_AIR, macBookAir.price);
 	await cartPage.verifyTotal(expectedTotal);
 	await cartPage.placeOrder({
 		name: 'Asuma',
